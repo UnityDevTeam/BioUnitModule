@@ -20,9 +20,9 @@ public class MouseOrbit : MonoBehaviour
 
 //	private Quaternion targetNornal = Vector3.up;
 
-	void Start () 
+	void Start ()
 	{
-		transform.rotation = Quaternion.LookRotation(target - anchor);
+	    transform.rotation = Quaternion.identity;
 		anchor = target - transform.forward * DEFAULT_DISTANCE;
 		transform.position = target - transform.forward * Vector3.Distance(target, anchor) * zoom;
 
