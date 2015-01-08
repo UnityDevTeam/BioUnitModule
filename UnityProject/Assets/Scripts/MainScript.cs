@@ -38,10 +38,11 @@ public class MainScript : MonoBehaviour
 	    }
 
         // Fetch reference to the script
+        Camera.main.depthTextureMode = DepthTextureMode.Depth;
 	    cameraScript = Camera.main.GetComponent<CameraScript>();
 
         // Add a new type of molecule to the system
-	    cameraScript.AddMoleculeType("p3", Color.blue);
+        cameraScript.AddMoleculeType("2OAU", Color.blue);
 
         // Add a new molecule in the scene at position 0,0,0
         AddNewMolecule(0, new Vector3(0,0,0), Quaternion.identity);

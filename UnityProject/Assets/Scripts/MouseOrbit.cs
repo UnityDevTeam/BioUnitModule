@@ -3,109 +3,94 @@ using UnityEngine;
 //[ExecuteInEditMode]
 public class MouseOrbit : MonoBehaviour
 {
-	public Vector3 target;
-	public Vector3 anchor;	
+    public Vector3 target;
 
-	public float xSpeed = 250.0f;
-	public float ySpeed = 120.0f;
-	
-	public float yMinLimit = -20f;
-	public float yMaxLimit = 90f;
+    public float xSpeed = 250.0f;
+    public float ySpeed = 120.0f;
 
-	public float DEFAULT_DISTANCE = 5.0f;
+    public float yMinLimit = -90f;
+    public float yMaxLimit = 90f;
 
-	public Vector3 cullReactionPlaneNormal;
+    const float DEFAULT_DISTANCE = 5.0f;
 
-	public float zoom = 1;
+    private float x = 0.0f;
+    private float y = 0.0f;
+    private float distance;
 
-//	private Quaternion targetNornal = Vector3.up;
+    void Start()
+    {
+        var angles = transform.eulerAngles;
+        x = angles.y;
+        y = angles.x;
 
-	void Start ()
-	{
-	    transform.rotation = Quaternion.identity;
-		anchor = target - transform.forward * DEFAULT_DISTANCE;
-		transform.position = target - transform.forward * Vector3.Distance(target, anchor) * zoom;
+        distance = Mathf.Abs(transform.position.z);
+    }
+    void Update()
+    {
+        if (Input.GetMouseButton(1))
+        {
+            x += Input.GetAxis("Mouse X") * xSpeed * 0.02f;
+            y -= Input.GetAxis("Mouse Y") * ySpeed * 0.02f;
+            y = ClampAngle(y, yMinLimit, yMaxLimit);
+        }
 
-//		transform.rotation = Quaternion.LookRotation(target - transform.position);
-//		anchor = target - transform.forward * DEFAULT_DISTANCE;
-	}
+        if (Input.GetMouseButton(2))
+        {
+            target -= gameObject.transform.up * Input.GetAxis("Mouse Y") * 0.25f;
+            target -= gameObject.transform.right * Input.GetAxis("Mouse X") * 0.25f;
+        }
 
-	void Update () 
-	{
-		if(Input.GetKeyDown(KeyCode.F))
-		{
-			zoom = 1;
-			anchor = target - transform.forward * DEFAULT_DISTANCE;
-		}
+        float scale = 20;
 
-		if(Input.GetKeyDown(KeyCode.L))
-		{
-			cullReactionPlaneNormal = transform.forward;
-		}
+        if (Input.GetKey(KeyCode.W))
+        {
+            target += gameObject.transform.forward * Time.deltaTime * scale;
+        }
 
-		if (Input.GetMouseButton(1))
-		{
-			float x = Input.GetAxis("Mouse X") * xSpeed * Time.deltaTime;
-			float y = -Input.GetAxis("Mouse Y") * ySpeed * Time.deltaTime; 
+        if (Input.GetKey(KeyCode.A))
+        {
+            target -= gameObject.transform.right * Time.deltaTime * scale;
+        }
 
-			float distance = Vector3.Distance(target, anchor);
+        if (Input.GetKey(KeyCode.D))
+        {
+            target += gameObject.transform.right * Time.deltaTime * scale;
+        }
 
-			var rotation = transform.rotation * Quaternion.Euler(y, x, 0.0f);
-			anchor = rotation * new Vector3(0.0f, 0.0f, -distance) + target;
-		}
+        if (Input.GetKey(KeyCode.S))
+        {
+            target -= gameObject.transform.forward * Time.deltaTime * scale;
+        }
 
-		float scale = 20;
+        if (Input.GetKey(KeyCode.F))
+        {
+            distance = DEFAULT_DISTANCE;
+        }
 
-		if (Input.GetMouseButton(2))
-		{
-			target -= transform.up * Input.GetAxis("Mouse Y") * Time.deltaTime * scale;   
-			anchor -= transform.up * Input.GetAxis("Mouse Y") * Time.deltaTime * scale;    
+        if (Input.GetAxis("Mouse ScrollWheel") > 0.0f) // forward
+        {
+            distance++;
+        }
+        if (Input.GetAxis("Mouse ScrollWheel") < 0.0f) // back
+        {
+            distance--;
+        }
 
-			target -= transform.right * Input.GetAxis("Mouse X") * Time.deltaTime * scale;    
-			anchor -= transform.right * Input.GetAxis("Mouse X") * Time.deltaTime * scale;  
-		}
+        var rotation = Quaternion.Euler(y, x, 0.0f);
+        var position = rotation * new Vector3(0.0f, 0.0f, -distance) + target;
 
-		if (Input.GetKey(KeyCode.W))
-		{
-			target += transform.forward * Time.deltaTime * scale;  
-			anchor += transform.forward * Time.deltaTime * scale;   
-		}
+        transform.rotation = rotation;
+        transform.position = position;
+    }
 
-		if (Input.GetKey(KeyCode.A))
-		{
-			target -= transform.right * Time.deltaTime * scale;   
-			anchor -= transform.right * Time.deltaTime * scale;    			
-		}
+    private float ClampAngle(float angle, float min, float max)
+    {
+        if (angle < -360.0f)
+            angle += 360.0f;
 
-		if (Input.GetKey(KeyCode.D))
-		{
-			target += transform.right * Time.deltaTime * scale;    			
-			anchor += transform.right * Time.deltaTime * scale;    			
-		}
+        if (angle > 360.0f)
+            angle -= 360.0f;
 
-		if (Input.GetKey(KeyCode.S))
-		{
-			target -= transform.forward * Time.deltaTime * scale; 	 
-			anchor -= transform.forward * Time.deltaTime * scale; 		
-		}
-
-		if (Input.GetAxis("Mouse ScrollWheel") != 0.0f) // forward
-		{
-			anchor += transform.forward * Time.deltaTime * scale * 10 * Input.GetAxis("Mouse ScrollWheel");   
-		}
-
-		transform.rotation = Quaternion.LookRotation(target - anchor);
-		transform.position = target - transform.forward * Vector3.Distance(target, anchor) * zoom;
-	}
-	
-	private float ClampAngle (float angle, float min, float max)
-	{
-		if (angle < -360.0f)
-			angle += 360.0f;
-
-		if (angle > 360.0f)
-			angle -= 360.0f;
-
-		return Mathf.Clamp (angle, min, max);
-	}
+        return Mathf.Clamp(angle, min, max);
+    }
 }

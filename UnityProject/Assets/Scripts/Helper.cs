@@ -32,28 +32,5 @@ public static class Helper
     {
         inVector.Set(floatArray[0], floatArray[1], floatArray[2], z);
     }
-
-    // Calculates new MVP matrix from main camera
-    public static Matrix4x4 GetMVPMatrix()
-    {
-        Matrix4x4 V = Camera.main.worldToCameraMatrix;
-        return GetProjectionMatrix() * V;
-    }
-
-	public static Matrix4x4 GetProjectionMatrix()
-	{
-		bool d3d = SystemInfo.graphicsDeviceVersion.IndexOf("Direct3D") > -1;		
-		Matrix4x4 P = Camera.main.projectionMatrix;
-		
-//		if (d3d)
-//		{
-//			// Invert Y for rendering to a render texture
-//			for ( int i = 0; i < 4; i++) { P[1,i] = -P[1,i]; }
-//			// Scale and bias from OpenGL -> D3D depth range
-//			for ( int i = 0; i < 4; i++) { P[2,i] = P[2,i]*0.5f + P[3,i]*0.5f;}
-//		}
-		
-		return P;
-	}
 }
 

@@ -31,10 +31,6 @@ Shader "Custom/MolShader"
 	uniform	StructuredBuffer<int> molTypes;
 	
 	uniform float molScale;	
-	uniform float cameraPosition;	
-//	uniform float4 viewDirection;	
-
-	float Epsilon = 1e-10;	
 	
 	float3 HSVtoRGB(float3 HSV)
 	{
@@ -89,9 +85,11 @@ Shader "Custom/MolShader"
 	float4 GetColor(int type, int state)
 	{
 		if(state == 0)
-			return float4( ModifyColor(molColors[type], 0.6, 0.75), 1);	// return float4( 0, 0, 0, 1);			
+			return float4( ModifyColor(molColors[type], 0.55, 0.55), 1);	// return float4( 0, 0, 0, 1);			
 		else if (state == 1)
-			return float4( ModifyColor(molColors[type], 0.5, 0.01), 1);	// return float4( 0, 0, 0, 1);	
+			return float4( 1, 1, 1, 1);
+		else if (state == 2)
+			return float4( ModifyColor(molColors[type], 0.55, 0.85), 1);	// return float4( 0, 0, 0, 1);
 		
 		return float4( 1, 1, 1, 1);	
 	}
@@ -157,12 +155,17 @@ Shader "Custom/MolShader"
 				
 			vs2hs VS(uint id : SV_VertexID)
 			{
-			    vs2hs output;
-			    
-				int lod = 1;	
+			    vs2hs output;						
 
 			    output.pos = molPositions[id].xyz;	
 			    output.rot = molRotations[id];
+
+				float4 vPos = mul (UNITY_MATRIX_MV, float4(output.pos, 1.0));
+				int lod = 1;
+
+				// Add heuristic here to decimate atoms
+				//int lod = -vPos.z / 25 + 1;
+
 			    output.info = float4( molTypes[id], molStates[id], lod, id);
 			    
 			    return output;
@@ -219,26 +222,35 @@ Shader "Custom/MolShader"
 				output.pos = op[0].pos;
 			    output.rot = op[0].rot;
 			    output.info = op[0].info;	
-			    output.info2.x = atomId * output.info.z;
+			    
+				output.info2.y = ceil((float) molAtomCountBuffer[op[0].info.x] / 4096.0);
+				output.info2.x = atomId * output.info.z * output.info2.y;
+				
 																
 				return output;			
 			}
 			
-			[maxvertexcount(1)]
+			[maxvertexcount(8)]
 			void GS(point ds2gs input[1], inout PointStream<gs2fs> pointStream)
 			{
-				if(input[0].info2.x < molAtomCountBuffer[input[0].info.x])
+				for(int i = 0; i < input[0].info2.y; i++)
 				{
-					float4 atomDataPDB = atomDataPDBBuffer[input[0].info2.x + molAtomStartBuffer[input[0].info.x]];	
+					int atomId = input[0].info2.x + i;
+					if(atomId < molAtomCountBuffer[input[0].info.x])
+					{
+						float4 atomDataPDB = atomDataPDBBuffer[atomId + molAtomStartBuffer[input[0].info.x]];	
 				
-					gs2fs output;
+						gs2fs output;
 					
-					output.worldPos = float4(input[0].pos + qtransform(input[0].rot, atomDataPDB.xyz) * molScale, atomDataPDB.w);
-					output.pos = mul(UNITY_MATRIX_MVP, float4(output.worldPos.xyz, 1));
-					output.info = input[0].info.xyzw;
+						// Add heuristic here to enlarge atom size
+						//output.worldPos = float4(input[0].pos + qtransform(input[0].rot, atomDataPDB.xyz) * molScale, atomDataPDB.w * 1 + input[0].info.z * 0.5);
+						output.worldPos = float4(input[0].pos + qtransform(input[0].rot, atomDataPDB.xyz) * molScale, atomDataPDB.w );
+						output.pos = mul(UNITY_MATRIX_MVP, float4(output.worldPos.xyz, 1));
+						output.info = input[0].info.xyzw;
 					
-					pointStream.Append(output);
-				} 					  					
+						pointStream.Append(output);
+					} 	
+				}								  					
 			}
 			
 			void FS (gs2fs input, out float4 color1 : COLOR0, out float4 color2 : COLOR1)
@@ -436,7 +448,7 @@ Shader "Custom/MolShader"
 				triangleStream.RestartStrip();	
 			}
 			
-			void FS (gs2fs input, in float4 screenSpace : SV_Position, out float4 fragColor : COLOR0, out float fragID : COLOR1, out float fragDepth : DEPTH) 
+			void FS (gs2fs input, out float4 fragColor : COLOR0, out float fragID : COLOR1, out float fragDepth : DEPTH) 
 			{	
 				float lensqr = dot(input.uv, input.uv);
     			
@@ -447,339 +459,14 @@ Shader "Custom/MolShader"
 				float atomEyeDepth = LinearEyeDepth(input.pos.z);		
 				
 				float3 light = float3(0, 0, 1);                									
-				float ndotl = max( 0.0, dot(light, normal));			
-//				float rimPower = 1.5;
-//				float rim = 1.0 - saturate(dot (normalize(float4(0.25,0,1,0)), normalize(normal)));  									
-//				fragColor = atomColor  + float4(0.25,0.25,0.25,0) * pow (rim, rimPower);
+				float ndotl = min( 1, max( 0.0, dot(light, normal)));			
 				
-				float4 color = GetColor(round(input.info.y), round(input.info.z));	
-
-				fragColor = color * 0.85 + color * ndotl * 0.15;			
+				fragColor = GetColor(round(input.info.y), round(input.info.z)) * ndotl;			
 				fragDepth = 1 / ((atomEyeDepth + input.info.x * -normal.z) * _ZBufferParams.z) - _ZBufferParams.w / _ZBufferParams.z;		
 				fragID = input.info.w;	
 			}			
 			ENDCG	
-		}
-		
-//		Pass
-//		{
-//            CGPROGRAM
-//            #pragma vertex vert_img
-//            #pragma fragment frag
-//
-//            #include "UnityCG.cginc"
-//
-//			sampler2D _MainTex;
-//			sampler2D _DepthTex;
-//			
-//            float4 frag(v2f_img i) : COLOR 
-//            {
-//            	float d = LinearEyeDepth(tex2D (_DepthTex, i.uv).r);
-//                return float4(d,d,d,1);
-//            }
-//            ENDCG
-//        }
-				
-//		Pass
-//		{
-//            CGPROGRAM
-//            #pragma vertex vert_img
-//            #pragma fragment frag
-//
-//            #include "UnityCG.cginc"
-//
-//			sampler2D_float _DepthBufferTex;
-//			
-//            void frag(v2f_img i, out float fragDepth : COLOR )
-//            {     
-//            	fragDepth = tex2D (_DepthBufferTex, i.uv);  
-//          	}
-//          	ENDCG
-//		}
-		
-		Pass
-		{
-            CGPROGRAM
-            #pragma vertex vert_img
-            #pragma fragment frag
-
-            #include "UnityCG.cginc"
-
-			sampler2D_float _MainTex;
-			sampler2D_float _DepthTex;
-			sampler2D_float _IDTex;
-			
-            void frag(v2f_img i, out float4 fragNormal : COLOR )
-            {               	
-            	float4 inputNormal = tex2D (_MainTex, i.uv);
-            	float inputDepth = tex2D (_DepthTex, i.uv);
-            	float inputID = tex2D (_IDTex, i.uv);  
-            	
-            	if(inputDepth == 1 || inputID <= 0)
-            	{            	
-            		discard;
-            	} 
-            					
-				float blurSize = 1.0 / _ScreenParams.x;
-				float3 sum = float3(0.0, 0, 0); 				
- 				
-				// blur in x (horizontal)
-				sum += tex2D(_MainTex, float2(i.uv.x - 4.0*blurSize, i.uv.y)) * 0.05;
-				sum += tex2D(_MainTex, float2(i.uv.x - 3.0*blurSize, i.uv.y)) * 0.09;
-				sum += tex2D(_MainTex, float2(i.uv.x - 2.0*blurSize, i.uv.y)) * 0.12;
-				sum += tex2D(_MainTex, float2(i.uv.x - blurSize, i.uv.y)) * 0.15;
-				sum += tex2D(_MainTex, float2(i.uv.x, i.uv.y)) * 0.16;
-				sum += tex2D(_MainTex, float2(i.uv.x + blurSize, i.uv.y)) * 0.15;
-				sum += tex2D(_MainTex, float2(i.uv.x + 2.0*blurSize, i.uv.y)) * 0.12;
-				sum += tex2D(_MainTex, float2(i.uv.x + 3.0*blurSize, i.uv.y)) * 0.09;
-				sum += tex2D(_MainTex, float2(i.uv.x + 4.0*blurSize, i.uv.y)) * 0.05;
-				
-				fragNormal = float4(sum, 1);		
-            }
-            ENDCG
-        }
-		
-		// Vertical depth blur
-		Pass
-		{
-            CGPROGRAM
-            #pragma vertex vert_img
-            #pragma fragment frag
-
-            #include "UnityCG.cginc"
-
-			sampler2D_float _MainTex;
-			sampler2D_float _DepthTex;
-			sampler2D_float _IDTex;
-			
-            void frag(v2f_img i, out float4 fragNormal : COLOR )
-            {       
-            	float4 inputNormal = tex2D (_MainTex, i.uv);
-            	float inputDepth = tex2D (_DepthTex, i.uv);
-            	float inputID = tex2D (_IDTex, i.uv);  
-            	
-            	if(inputDepth == 1 || inputID <= 0)
-            	{            	
-            		discard;
-            	}
-				
-				float blurSize = 1.0 / _ScreenParams.y;
-				float3 sum = float3(0.0, 0, 0); 				
- 				
-				// blur in y (vertical)
-				sum += tex2D(_MainTex, float2(i.uv.x, i.uv.y - 4.0*blurSize)) * 0.05;
-				sum += tex2D(_MainTex, float2(i.uv.x, i.uv.y - 3.0*blurSize)) * 0.09;
-				sum += tex2D(_MainTex, float2(i.uv.x, i.uv.y - 2.0*blurSize)) * 0.12;
-				sum += tex2D(_MainTex, float2(i.uv.x, i.uv.y - blurSize)) * 0.15;
-				sum += tex2D(_MainTex, float2(i.uv.x, i.uv.y)) * 0.16;
-				sum += tex2D(_MainTex, float2(i.uv.x, i.uv.y + blurSize)) * 0.15;
-				sum += tex2D(_MainTex, float2(i.uv.x, i.uv.y + 2.0*blurSize)) * 0.12;
-				sum += tex2D(_MainTex, float2(i.uv.x, i.uv.y + 3.0*blurSize)) * 0.09;
-				sum += tex2D(_MainTex, float2(i.uv.x, i.uv.y + 4.0*blurSize)) * 0.05;
-				
-				fragNormal = float4(sum, 1);				
-            }
-            ENDCG
-        }
-        
-		Pass
-		{
-            CGPROGRAM
-            #pragma vertex vert_img
-            #pragma fragment frag
-
-            #include "UnityCG.cginc"
-
-			sampler2D_float _MainTex;
-			sampler2D_float _DepthTex;
-			sampler2D_float _IDTex;
-			
-            void frag(v2f_img i, out float4 fragColor : COLOR )
-            {     
-            	float4 inputNormal = tex2D (_MainTex, i.uv);
-            	float inputDepth = tex2D (_DepthTex, i.uv);
-            	float inputID = tex2D (_IDTex, i.uv);  
-            	
-            	if(inputDepth == 1 || inputID <= 0)
-            	{            	
-            		discard;
-            	}             	
-           	
-            	float rimPower = 2.5;
-				float rim = 1.0 - saturate(dot (normalize(float3(0.5,0,1)), inputNormal.xyz));  									
-				fragColor = /*_Color2*/ + float4(0.8, 0.8, 0.75, 1) * pow (rim * 1, rimPower);
-            		
-          	}
-          	ENDCG
-		}
-		
-		Pass
-		{
-			ZTest On
-			ZWrite On
-			
-			CGPROGRAM
-			
-			#pragma vertex vert_img
-            #pragma fragment frag
-            
-			#include "UnityCG.cginc"
-
-			sampler2D _MainTex;
-			sampler2D_float _DepthTex;	
-			
-//			static float IaoCap = 1.0f;
-//			static float IaoMultiplier=10000.0f;
-//			static float IdepthTolerance=0.00001;
-//			static float IaoScale = 0.6;
-
-			static float IaoCap = 0.9f;
-			static float IaoMultiplier=10000.0f;
-			static float IdepthTolerance=0.00001;
-			static float IaoScale = 0.6;
-
-			float readDepth( in float2 coord ) 
-			{
-				return LinearEyeDepth(tex2D (_DepthTex, coord).r) * 0.1;
-			}
-
-			float compareDepths( in float depth1, in float depth2 )
-			{
-				float ao=0.0;
-				if (depth2>0.0 && depth1>0.0) 
-				{
-					float diff = sqrt( clamp( (depth1-depth2),0.0,1.0) );
-									
-					if (diff<0.15)
-					ao = min(IaoCap,max(0.0,depth1-depth2-IdepthTolerance) * IaoMultiplier) * min(diff,0.1);
-					
-				}
-				return ao;
-			}				
-
-			float4 frag (v2f_img i) : COLOR0
-			{
-				float3 color = tex2D(_MainTex, i.uv).rgb;
-				float depth = readDepth(i.uv);				
-
-				if(depth  == 1) discard;
-
-//				return float4(depth, 0, 0, 1);
-			
-				float d;
-				float pw = 5.0 / _ScreenParams.x;
-				float ph = 5.0 / _ScreenParams.y;
-
-				float aoCap = IaoCap;
-
-				float ao = 0.0;			
-				
-				//float aoMultiplier=10000.0;
-				float aoMultiplier= IaoMultiplier;
-				float depthTolerance = IdepthTolerance;
-				float aoscale= IaoScale;
-
-				d=readDepth( float2(i.uv.x+pw,i.uv.y+ph));
-				ao+=compareDepths(depth,d)/aoscale;
-				d=readDepth( float2(i.uv.x-pw,i.uv.y+ph));
-				ao+=compareDepths(depth,d)/aoscale;
-				d=readDepth( float2(i.uv.x+pw,i.uv.y-ph));
-				ao+=compareDepths(depth,d)/aoscale;
-				d=readDepth( float2(i.uv.x-pw,i.uv.y-ph));
-				ao+=compareDepths(depth,d)/aoscale;			    
-			    
-				d=readDepth( float2(i.uv.x+pw,i.uv.y));
-				ao+=compareDepths(depth,d)/aoscale;
-				d=readDepth( float2(i.uv.x-pw,i.uv.y));
-				ao+=compareDepths(depth,d)/aoscale;
-				d=readDepth( float2(i.uv.x,i.uv.y+ph));
-				ao+=compareDepths(depth,d)/aoscale;
-				d=readDepth( float2(i.uv.x,i.uv.y-ph));
-				ao+=compareDepths(depth,d)/aoscale;    
-				
-				pw*=2.0;
-				ph*=2.0;
-				aoMultiplier/=2.0;
-				aoscale*=1.2;
-				
-				d=readDepth( float2(i.uv.x+pw,i.uv.y+ph));
-				ao+=compareDepths(depth,d)/aoscale;
-				d=readDepth( float2(i.uv.x-pw,i.uv.y+ph));
-				ao+=compareDepths(depth,d)/aoscale;
-				d=readDepth( float2(i.uv.x+pw,i.uv.y-ph));
-				ao+=compareDepths(depth,d)/aoscale;
-				d=readDepth( float2(i.uv.x-pw,i.uv.y-ph));
-				ao+=compareDepths(depth,d)/aoscale;
-			    
-				d=readDepth( float2(i.uv.x+pw,i.uv.y));
-				ao+=compareDepths(depth,d)/aoscale;
-				d=readDepth( float2(i.uv.x-pw,i.uv.y));
-				ao+=compareDepths(depth,d)/aoscale;
-				d=readDepth( float2(i.uv.x,i.uv.y+ph));
-				ao+=compareDepths(depth,d)/aoscale;
-				d=readDepth( float2(i.uv.x,i.uv.y-ph));
-				ao+=compareDepths(depth,d)/aoscale;    			    
-
-				pw*=2.0;
-				ph*=2.0;
-				aoMultiplier/=2.0;
-				aoscale*=1.2;
-				
-				d=readDepth( float2(i.uv.x+pw,i.uv.y+ph));
-				ao+=compareDepths(depth,d)/aoscale;
-				d=readDepth( float2(i.uv.x-pw,i.uv.y+ph));
-				ao+=compareDepths(depth,d)/aoscale;
-				d=readDepth( float2(i.uv.x+pw,i.uv.y-ph));
-				ao+=compareDepths(depth,d)/aoscale;
-				d=readDepth( float2(i.uv.x-pw,i.uv.y-ph));
-				ao+=compareDepths(depth,d)/aoscale;
-				
-			  	d=readDepth( float2(i.uv.x+pw,i.uv.y));
-				ao+=compareDepths(depth,d)/aoscale;
-				d=readDepth( float2(i.uv.x-pw,i.uv.y));
-				ao+=compareDepths(depth,d)/aoscale;
-				d=readDepth( float2(i.uv.x,i.uv.y+ph));
-				ao+=compareDepths(depth,d)/aoscale;
-				d=readDepth( float2(i.uv.x,i.uv.y-ph));
-				ao+=compareDepths(depth,d)/aoscale; 
-			    
-				pw*=2.0;
-				ph*=2.0;
-				aoMultiplier/=2.0;
-				aoscale*=1.2;
-				
-				d=readDepth( float2(i.uv.x+pw,i.uv.y+ph));
-				ao+=compareDepths(depth,d)/aoscale;
-				d=readDepth( float2(i.uv.x-pw,i.uv.y+ph));
-				ao+=compareDepths(depth,d)/aoscale;
-				d=readDepth( float2(i.uv.x+pw,i.uv.y-ph));
-				ao+=compareDepths(depth,d)/aoscale;
-				d=readDepth( float2(i.uv.x-pw,i.uv.y-ph));
-				ao+=compareDepths(depth,d)/aoscale;
-			    
-			    d=readDepth( float2(i.uv.x+pw,i.uv.y));
-				ao+=compareDepths(depth,d)/aoscale;
-				d=readDepth( float2(i.uv.x-pw,i.uv.y));
-				ao+=compareDepths(depth,d)/aoscale;
-				d=readDepth( float2(i.uv.x,i.uv.y+ph));
-				ao+=compareDepths(depth,d)/aoscale;
-				d=readDepth( float2(i.uv.x,i.uv.y-ph));
-				ao+=compareDepths(depth,d)/aoscale;
-
-				// ao/=4.0;
-			    ao/=8.0;
-			    ao = 1.0- (ao * 1.0);
-//			    ao = 1.5*ao;
-
-			    ao = clamp(ao, 0.0, 1.0 ) ;			    
-//				return float4(float3(ao,ao,ao), 1.0);
-				return float4(color * ao, 1.0);
-			}
-			
-			
-			ENDCG
-		}			
-						
+		}						
 	}
 	Fallback Off
 }	
