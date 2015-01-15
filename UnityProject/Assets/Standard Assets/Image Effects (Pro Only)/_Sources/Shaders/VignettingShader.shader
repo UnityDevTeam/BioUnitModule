@@ -17,8 +17,8 @@ Shader "Hidden/Vignetting" {
 	sampler2D _MainTex;
 	sampler2D _VignetteTex;
 	
-	float _Intensity;
-	float _Blur;
+	half _Intensity;
+	half _Blur;
 
 	float4 _MainTex_TexelSize;
 		
@@ -36,18 +36,18 @@ Shader "Hidden/Vignetting" {
 		return o;
 	} 
 	
-	float4 frag(v2f i) : COLOR {
-		float2 coords = i.uv;
-		float2 uv = i.uv;
+	half4 frag(v2f i) : SV_Target {
+		half2 coords = i.uv;
+		half2 uv = i.uv;
 		
 		coords = (coords - 0.5) * 2.0;		
-		float coordDot = dot (coords,coords);
-		float4 color = tex2D (_MainTex, uv);	 
+		half coordDot = dot (coords,coords);
+		half4 color = tex2D (_MainTex, uv);	 
 
-		float mask = 1.0f - coordDot * _Intensity * 0.1f; 
+		float mask = 1.0 - coordDot * _Intensity * 0.1; 
 		
-//		float4 colorBlur = tex2D (_VignetteTex, i.uv2);
-//		color = lerp (color, colorBlur, saturate (_Blur * coordDot));
+		half4 colorBlur = tex2D (_VignetteTex, i.uv2);
+		color = lerp (color, colorBlur, saturate (_Blur * coordDot));
 		
 		return color * mask;
 	}
