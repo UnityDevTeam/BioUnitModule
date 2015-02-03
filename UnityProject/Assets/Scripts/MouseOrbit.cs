@@ -11,7 +11,7 @@ public class MouseOrbit : MonoBehaviour
     public float yMinLimit = -90f;
     public float yMaxLimit = 90f;
 
-    const float DEFAULT_DISTANCE = 50.0f;
+    const float DEFAULT_DISTANCE = 5.0f;
 
     private float x = 0.0f;
     private float y = 0.0f;
@@ -23,7 +23,7 @@ public class MouseOrbit : MonoBehaviour
         x = angles.y;
         y = angles.x;
 
-        distance = DEFAULT_DISTANCE;
+        distance = Mathf.Abs(transform.position.z);
     }
     void Update()
     {

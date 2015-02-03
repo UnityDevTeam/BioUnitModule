@@ -29,7 +29,7 @@ Shader "Hidden/ScreenSpaceAmbientObscurance"
 	#include "UnityCG.cginc"
 
 	#ifdef SHADER_API_D3D11
-		#define NUM_SAMPLES (63)
+		#define NUM_SAMPLES (15)
 	#else
 		#define NUM_SAMPLES (11)
 	#endif
